@@ -1,6 +1,8 @@
 package ssm
 
 import (
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -90,7 +92,7 @@ func resourceResourceDataSyncCreate(d *schema.ResourceData, meta interface{}) er
 	}
 
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating SSM Resource Data Sync: %w", err)
 	}
 
 	d.SetId(d.Get("name").(string))
@@ -101,12 +103,11 @@ func resourceResourceDataSyncRead(d *schema.ResourceData, meta interface{}) erro
 	conn := meta.(*conns.AWSClient).SSMConn
 
 	syncItem, err := FindResourceDataSyncItem(conn, d.Id())
-	if err != nil {
-		return err
+	if !d.IsNewResource() && tfresource.NotFound(err) {
+		log.Printf("[WARN] SSM Resource Data Sync (%s) not found, removing from state", d.Id())
 	}
-	if syncItem == nil {
-		d.SetId("")
-		return nil
+	if err != nil {
+		return fmt.Errorf("error reading SSM Resource Data Sync (%s): %w", d.Id(), err)
 	}
 	d.Set("name", syncItem.SyncName)
 	d.Set("s3_destination", flattenSsmResourceDataSyncS3Destination(syncItem.S3Destination))
@@ -125,7 +126,7 @@ func resourceResourceDataSyncDelete(d *schema.ResourceData, meta interface{}) er
 		if tfawserr.ErrCodeEquals(err, ssm.ErrCodeResourceDataSyncNotFoundException) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("error deleting SSM Resource Data Sync (%s): %w", d.Id(), err)
 	}
 	return nil
 }
@@ -151,7 +152,7 @@ func FindResourceDataSyncItem(conn *ssm.SSM, name string) (*ssm.ResourceDataSync
 		}
 		nextToken = *resp.NextToken
 	}
-	return nil, nil
+	return nil, &resource.NotFoundError{}
 }
 
 func flattenSsmResourceDataSyncS3Destination(dest *ssm.ResourceDataSyncS3Destination) []interface{} {
